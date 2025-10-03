@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>QR PIX - GitHub Pages</title>
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; background:#f5f7fb; color:#111;}
+    .card { background:white; padding:20px; border-radius:12px; box-shadow:0 6px 20px rgba(20,30,50,0.08); width:320px; text-align:center;}
+    canvas { display:block; margin: 0 auto 12px; }
+    .small { font-size:0.9rem; color:#444; margin-bottom:10px; word-break:break-word;}
+    button { padding:10px 14px; border-radius:8px; border: none; cursor:pointer; font-weight:600; }
+    .primary { background:#0066cc; color:white; }
+    .secondary { background:#e9eef6; color:#0b3b66; margin-left:8px; }
+    .row { display:flex; justify-content:center; gap:8px; margin-top:10px; }
+    .raw { background:#f3f6fb; padding:8px; border-radius:8px; font-size:0.85rem; text-align:left; max-height:80px; overflow:auto;}
+    a.download { text-decoration:none; }
+    .hint { font-size:0.8rem; color:#666; margin-top:8px; }
+  </style>
+  <!-- Biblioteca qrious para gerar QR em canvas (funciona client-side) -->
+  <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+</head>
+<body>
+  <div class="card" role="main">
+    <h2 id="title">QR Code</h2>
+    <canvas id="qr"></canvas>
+    <div class="small" id="desc">Carregando...</div>
+
+    <div class="row">
+      <button id="payBtn" class="primary">Pagar (PIX)</button>
+      <button id="copyBtn" class="secondary">Copiar</button>
+    </div>
+
+    <div class="row" style="margin-top:8px;">
+      <a id="downloadLink" class="download" download="pix-qr.png"><button class="secondary">Baixar PNG</button></a>
+    </div>
+
+    <div class="raw" id="rawText" style="margin-top:12px;"></div>
+    <div class="hint">Use parâmetros na URL: <code>?pix=SEU_TEXTO_PIX&label=Botão</code></div>
+  </div>
+
+  <script>
+    // Lê parâmetros da URL
+    const params = new URLSearchParams(location.search);
+    const value = params.get('pix') || params.get('text') || '';
+    const buttonLabel = params.get('label') || params.get('button') || 'Pagar com PIX';
+    const title = params.get('title') || 'QR Code';
+    const size = parseInt(params.get('size')) || 300;
+
+    // Elementos
+    const canvas = document.getElementById('qr');
+    const desc = document.getElementById('desc');
+    const rawText = document.getElementById('rawText');
+    const payBtn = document.getElementById('payBtn');
+    const copyBtn = document.getElementById('copyBtn');
+    const downloadLink = document.getElementById('downloadLink');
+    document.getElementById('title').textContent = title;
+    payBtn.textContent = buttonLabel;
+
+    function updateUI() {
+      if (!value) {
+        desc.textContent = 'Nenhum conteúdo PIX (use ?pix=...)';
+        rawText.textContent = '(vazio)';
+        canvas.style.display = 'none';
+        downloadLink.style.display = 'none';
+        payBtn.disabled = true;
+        copyBtn.disabled = true;
+        return;
+      }
+
+      canvas.style.display = 'block';
+      downloadLink.style.display = 'inline-block';
+      payBtn.disabled = false;
+      copyBtn.disabled = false;
+
+      desc.textContent = 'QR gerado a partir do parâmetro da URL.';
+      rawText.textContent = value;
+      // Gera o QR (QRious)
+      const qr = new QRious({
+        element: canvas,
+        value: value,
+        size: size,
+        level: 'H' // correção máxima
+      });
+
+      // Prepara link para download
+      try {
+        const dataUrl = canvas.toDataURL('image/png');
+        downloadLink.href = dataUrl;
+      } catch (e) {
+        // se falhar, esconde a opção de download
+        downloadLink.style.display = 'none';
+      }
+    }
+
+    // Ação do botão "Pagar" - aqui apenas copiamos e tentamos abrir uri (se for um payload compatível)
+    payBtn.addEventListener('click', async () => {
+      if (!value) return;
+      // tenta copiar
+      try {
+        await navigator.clipboard.writeText(value);
+      } catch (e) {
+        // ignore
+      }
+
+      // Tenta abrir um deep link pix: (nem todos apps usam isso). Se o valor já parecer um payload EMV, abre diretamente.
+      // Nota: esse passo é opcional — muitos apps de PIX aceitam leitura do QR, então abrir uma uri pode falhar em alguns navegadores/dispositivos.
+      const maybePixUri = value.startsWith('000201') || value.startsWith('BR') ? 'pix:' + encodeURIComponent(value) : null;
+      if (maybePixUri) {
+        // abre em nova aba — o comportamento depende do dispositivo/app do usuário
+        window.open(maybePixUri, '_blank');
+      } else {
+        // apenas mostra um alerta amigável
+        alert('Texto PIX copiado para a área de transferência.');
+      }
+    });
+
+    // Botão copiar
+    copyBtn.addEventListener('click', async () => {
+      if (!value) return;
+      try {
+        await navigator.clipboard.writeText(value);
+        copyBtn.textContent = 'Copiado!';
+        setTimeout(()=> copyBtn.textContent = (params.get('button') || 'Copiar'), 1500);
+      } catch (e) {
+        // fallback: selecionar o texto para que o usuário copie manualmente
+        alert('Não foi possível copiar automaticamente. Selecione e copie manualmente:\\n\\n' + value);
+      }
+    });
+
+    // Inicializa
+    updateUI();
+
+    // Dica de uso: exemplo de URL
+    // https://SEU_USUARIO.github.io/SEU_REPO/?pix=00020126580014br.gov.bcb.pix0136abcdef...&label=Pagar
+  </script>
+</body>
+</html>
